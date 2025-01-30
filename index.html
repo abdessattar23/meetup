@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncFlix Lite - Watch Together, Stay Connected</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="landing-page">
+        <div class="hero">
+            <h1>SyncFlix Lite</h1>
+            <p class="tagline">Watch together, feel together</p>
+            <button class="create-room-btn">
+                <span class="btn-text">Create Room</span>
+                <div class="heart-pulse"></div>
+            </button>
+            <p class="subtext">Share the link with your partner to start!</p>
+        </div>
+        <div class="silhouettes">
+            <div class="couple-silhouette"></div>
+        </div>
+    </div>
+
+    <div class="room-page hidden">
+        <div class="control-bar">
+            <div class="url-input-container">
+                <input type="text" id="videoUrl" placeholder="Paste YouTube/MP4 link… ">
+                <button class="go-btn">Go</button>
+            </div>
+            <div class="sync-status">
+                <span class="status-dot"></span>
+                <span class="status-text">In sync</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="video-player">
+                <div id="player"></div>
+                <div class="video-controls">
+                    <div class="progress-bar">
+                        <div class="progress"></div>
+                    </div>
+                    <div class="controls-bottom">
+                        <button class="play-pause">
+                            <span class="play-icon">▶</span>
+                            <span class="pause-icon hidden">⏸</span>
+                        </button>
+                        <div class="volume-control">
+                            <button class="volume-btn">🔊</button>
+                            <input type="range" class="volume-slider" min="0" max="100" value="100">
+                        </div>
+                        <div class="timestamp">00:00 / 00:00</div>
+                        <button class="fullscreen-btn">⛶</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="video-call">
+                <div class="partner-video">
+                    <video id="partnerVideo" autoplay playsinline></video>
+                    <div class="partner-status">Waiting for partner... ❤️</div>
+                </div>
+                <div class="self-video">
+                    <video id="selfVideo" autoplay playsinline muted></video>
+                    <div class="video-status">Your camera</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="reactions">
+            <button class="reaction-btn">❤️🔥</button>
+            <button class="reaction-btn">😂</button>
+            <button class="reaction-btn">🥺</button>
+        </div>
+    </div>
+
+    <script src="webrtc.js"></script>
+    <script src="app.js" defer></script>
+</body>
+</html>
