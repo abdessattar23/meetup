@@ -26,14 +26,14 @@ let roomId = null;
 
 // Socket.IO Connection
 function connectToServer() {
-  const serverUrl = process.env.SERVER_URL || window.location.origin;
+  const serverUrl = window.location.origin;
   socket = io(serverUrl, {
-    transports: ['websocket'],
-    reconnectionDelayMax: 10000
+    transports: ["websocket"],
+    reconnectionDelayMax: 10000,
   });
 
-  socket.on('connect', () => {
-    console.log('Connected to server');
+  socket.on("connect", () => {
+    console.log("Connected to server");
   });
 
   socket.on("room-joined", async (data) => {
