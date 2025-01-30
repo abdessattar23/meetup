@@ -1,215 +1,204 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-const crypto = require('crypto');
-require('dotenv').config();
+const express = require("express");
+const { Server } = require("socket.io");
+const https = require("https");
+const fs = require("fs");
+const { v4: uuidv4 } = require("uuid");
+const path = require("path");
 
 const app = express();
-app.use(express.static(__dirname));
 
-// Create HTTP server
-const server = http.createServer(app);
-
-// Socket.IO with optimized settings
+const server = https.createServer(app);
 const io = new Server(server, {
-    pingTimeout: 30000,
-    pingInterval: 5000,
-    transports: ['websocket'],
-    perMessageDeflate: false,
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
 });
 
-// Room management with improved data structure
+// Serve static files
+app.use(express.static(path.join(__dirname)));
+
+// HTTP redirect to HTTPS
+app.use((req, res, next) => {
+  if (!req.secure) {
+    return res.redirect(["https://", req.hostname, req.url].join(""));
+  }
+  next();
+});
+
+// Store room data
 const rooms = new Map();
 
-// Generate a secure room ID
-function generateRoomId() {
-    // Generate 16 bytes of random data and convert to hex
-    return crypto.randomBytes(16).toString('hex').substring(0, 12);
-}
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+  let currentRoom = null;
 
-// Debug function to log room state
-function logRoomState(roomId) {
-    const room = rooms.get(roomId);
-    if (room) {
-        console.log(`Room ${roomId} state:`, {
-            userCount: room.users.size,
-            users: Array.from(room.users.entries()).map(([id, user]) => ({
-                id,
-                isInitiator: user.isInitiator
-            }))
-        });
+  // Create or join room
+  socket.on("join-room", (roomId) => {
+    console.log(`User ${socket.id} attempting to join room ${roomId}`);
+
+    // Generate new room ID if none provided
+    if (!roomId) {
+      roomId = uuidv4();
     }
-}
 
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+    // If user is already in this room, ignore
+    if (currentRoom === roomId) {
+      console.log(`User ${socket.id} is already in room ${roomId}`);
+      return;
+    }
 
-    socket.on('join-room', (roomId) => {
-        // Generate new room ID if none provided, ensure it's unique
-        let targetRoom = roomId;
-        if (!targetRoom) {
-            do {
-                targetRoom = generateRoomId();
-            } while (rooms.has(targetRoom));
+    // Leave current room if in one
+    if (currentRoom) {
+      const oldRoom = rooms.get(currentRoom);
+      if (oldRoom) {
+        console.log(`User ${socket.id} leaving room ${currentRoom}`);
+        oldRoom.users.delete(socket.id);
+        socket.leave(currentRoom);
+        socket.to(currentRoom).emit("partner-left");
+
+        if (oldRoom.users.size === 0) {
+          console.log(`Removing empty room ${currentRoom}`);
+          rooms.delete(currentRoom);
         }
+      }
+    }
 
-        console.log(`User ${socket.id} attempting to join room ${targetRoom}`);
+    // Create room if it doesn't exist
+    if (!rooms.has(roomId)) {
+      console.log(`Creating new room ${roomId}`);
+      rooms.set(roomId, {
+        users: new Map(),
+        videoUrl: null,
+        playbackState: {
+          isPlaying: false,
+          currentTime: 0,
+        },
+      });
+    }
 
-        // Get or create room with proper initialization
-        let room = rooms.get(targetRoom);
-        if (!room) {
-            room = {
-                users: new Map(),
-                videoUrl: null,
-                playbackState: null,
-                createdAt: Date.now()
-            };
-            rooms.set(targetRoom, room);
-            console.log(`Created new room ${targetRoom}`);
-        }
+    const room = rooms.get(roomId);
 
-        // Check room capacity
-        if (room.users.size >= 2) {
-            console.log(`Room ${targetRoom} is full, rejecting user ${socket.id}`);
-            socket.emit('room-full');
-            return;
-        }
+    // Check if room is full (max 2 users)
+    if (room.users.size >= 2) {
+      console.log(`Room ${roomId} is full`);
+      socket.emit("room-full");
+      return;
+    }
 
-        // Leave any existing rooms first
-        for (const [id, r] of rooms) {
-            if (r.users.has(socket.id)) {
-                r.users.delete(socket.id);
-                socket.leave(id);
-                socket.to(id).emit('partner-left');
-                if (r.users.size === 0) {
-                    console.log(`Removing empty room ${id}`);
-                    rooms.delete(id);
-                }
-            }
-        }
+    // Join room
+    currentRoom = roomId;
+    socket.join(roomId);
 
-        // Join the room
-        socket.join(targetRoom);
-        const isFirstUser = room.users.size === 0;
-        room.users.set(socket.id, {
-            joinedAt: Date.now(),
-            isInitiator: !isFirstUser // Second user is initiator
-        });
-
-        console.log(`User ${socket.id} joined room ${targetRoom} as ${isFirstUser ? 'first' : 'second'} user`);
-        logRoomState(targetRoom);
-
-        // Notify the joining user
-        socket.emit('room-joined', {
-            roomId: targetRoom,
-            isInitiator: !isFirstUser,
-            videoUrl: room.videoUrl,
-            playbackState: room.playbackState
-        });
-
-        // If this is the second user, notify both users
-        if (!isFirstUser) {
-            const users = Array.from(room.users.entries());
-            const [firstUser] = users;
-            
-            // Notify first user about second user joining
-            socket.to(targetRoom).emit('partner-joined', {
-                isInitiator: false
-            });
-        }
+    // Add user to room
+    const isFirstUser = room.users.size === 0;
+    room.users.set(socket.id, {
+      joinTime: Date.now(),
+      isInitiator: !isFirstUser, // Second user is initiator
     });
 
-    // Handle WebRTC signaling
-    socket.on('signal', (data) => {
-        if (!data || !data.roomId) {
-            console.warn('Invalid signal data received');
-            return;
-        }
+    console.log(`User ${socket.id} joined room ${roomId}`);
+    console.log(`Room ${roomId} now has ${room.users.size} users`);
 
-        const room = rooms.get(data.roomId);
-        if (!room) {
-            console.warn(`Room ${data.roomId} not found for signal`);
-            return;
-        }
-
-        if (!room.users.has(socket.id)) {
-            console.warn(`User ${socket.id} not in room ${data.roomId}`);
-            return;
-        }
-
-        // Find the other user in the room
-        const otherUser = Array.from(room.users.keys()).find(id => id !== socket.id);
-        if (otherUser) {
-            console.log(`Forwarding ${data.type} signal from ${socket.id} to ${otherUser}`);
-            socket.to(otherUser).emit('signal', data);
-        }
+    // Send room state to new user
+    socket.emit("room-joined", {
+      roomId,
+      videoUrl: room.videoUrl,
+      playbackState: room.playbackState,
+      isInitiator: room.users.get(socket.id).isInitiator,
     });
 
-    socket.on('video-url', (url) => {
-        for (const [roomId, room] of rooms) {
-            if (room.users.has(socket.id)) {
-                room.videoUrl = url;
-                socket.to(roomId).emit('video-url', url);
-                break;
-            }
-        }
-    });
+    // If this is the second user, notify both users
+    if (room.users.size === 2) {
+      const users = Array.from(room.users.entries());
+      const [firstUser, secondUser] = users;
 
-    socket.on('playback-state', (state) => {
-        for (const [roomId, room] of rooms) {
-            if (room.users.has(socket.id)) {
-                room.playbackState = state;
-                socket.to(roomId).emit('playback-state', state);
-                break;
-            }
-        }
-    });
+      // Notify first user about second user joining
+      socket.to(firstUser[0]).emit("partner-joined", {
+        isInitiator: firstUser[1].isInitiator,
+      });
 
-    socket.on('reaction', (emoji) => {
-        for (const [roomId, room] of rooms) {
-            if (room.users.has(socket.id)) {
-                socket.to(roomId).emit('reaction', emoji);
-                break;
-            }
-        }
-    });
+      // Notify second user (current user)
+      socket.emit("partner-joined", {
+        isInitiator: secondUser[1].isInitiator,
+      });
+    }
+  });
 
-    socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
-        for (const [roomId, room] of rooms) {
-            if (room.users.has(socket.id)) {
-                room.users.delete(socket.id);
-                socket.to(roomId).emit('partner-left');
-                if (room.users.size === 0) {
-                    console.log(`Removing empty room ${roomId}`);
-                    rooms.delete(roomId);
-                }
-                break;
-            }
+  // Handle WebRTC signaling
+  socket.on("signal", (data) => {
+    if (!currentRoom) {
+      console.log("No current room for signal");
+      return;
+    }
+
+    const room = rooms.get(currentRoom);
+    if (!room) {
+      console.log("Room not found for signal");
+      return;
+    }
+
+    console.log(`Signal received from ${socket.id}:`, data.type);
+
+    // Find the other user in the room
+    const otherUser = Array.from(room.users.keys()).find(
+      (id) => id !== socket.id
+    );
+    if (otherUser) {
+      console.log(`Forwarding ${data.type} signal to ${otherUser}`);
+      socket.to(otherUser).emit("signal", data);
+    } else {
+      console.log("No other users in room to forward signal to");
+    }
+  });
+
+  // Handle video sync events
+  socket.on("video-url", (url) => {
+    if (currentRoom) {
+      const room = rooms.get(currentRoom);
+      if (room) {
+        room.videoUrl = url;
+        socket.to(currentRoom).emit("video-url", url);
+      }
+    }
+  });
+
+  socket.on("playback-state", (state) => {
+    if (currentRoom) {
+      const room = rooms.get(currentRoom);
+      if (room) {
+        room.playbackState = state;
+        socket.to(currentRoom).emit("playback-state", state);
+      }
+    }
+  });
+
+  socket.on("reaction", (emoji) => {
+    if (currentRoom) {
+      socket.to(currentRoom).emit("reaction", emoji);
+    }
+  });
+
+  // Handle disconnection
+  socket.on("disconnect", () => {
+    console.log(`User ${socket.id} disconnected`);
+    if (currentRoom) {
+      const room = rooms.get(currentRoom);
+      if (room) {
+        room.users.delete(socket.id);
+        socket.to(currentRoom).emit("partner-left");
+
+        if (room.users.size === 0) {
+          console.log(`Removing empty room ${currentRoom}`);
+          rooms.delete(currentRoom);
         }
-    });
+      }
+    }
+  });
 });
 
-// Cleanup old rooms periodically
-setInterval(() => {
-    const now = Date.now();
-    for (const [roomId, room] of rooms) {
-        // Remove rooms older than 24 hours with no users
-        if (room.users.size === 0 && now - room.createdAt > 24 * 60 * 60 * 1000) {
-            console.log(`Removing stale room ${roomId}`);
-            rooms.delete(roomId);
-        }
-    }
-}, 60 * 60 * 1000); // Run every hour
-
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
-
-server.listen(PORT, HOST, () => {
-    console.log(`Server running on http://${HOST}:${PORT}`);
+const HOST = proccess.env.HOST || "https://pyt-0b09.onrender.com";
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on ${HOST}:${PORT}`);
 });

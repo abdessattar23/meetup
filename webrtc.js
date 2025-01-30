@@ -236,19 +236,14 @@ class WebRTCHandler {
             // Wait for loadedmetadata event before playing
             remoteVideo.onloadedmetadata = () => {
               console.log("Remote video metadata loaded");
-              remoteVideo
-                .play()
+              remoteVideo.play()
                 .then(() => {
                   console.log("Remote video playing");
                   remoteVideo.parentElement.classList.add("connected");
-                  document.querySelector(".partner-status").textContent =
-                    "Connected! 💚";
+                  document.querySelector(".partner-status").textContent = "Connected! 💚";
                 })
                 .catch((error) => {
-                  console.warn(
-                    "Auto-play was prevented for remote video:",
-                    error
-                  );
+                  console.warn("Auto-play was prevented for remote video:", error);
                   // Add attributes that will help with auto-play
                   remoteVideo.setAttribute("autoplay", "true");
                   remoteVideo.setAttribute("playsinline", "true");
@@ -300,41 +295,33 @@ class WebRTCHandler {
           }
         } else if (data.type === "offer") {
           try {
-            const offerCollision =
-              this.makingOffer ||
-              this.peerConnection.signalingState !== "stable";
+            const offerCollision = this.makingOffer || this.peerConnection.signalingState !== "stable";
             const polite = !this.isInitiator;
-
-            console.log(
-              `Handling offer. Collision? ${offerCollision}. Polite? ${polite}`
-            );
+            
+            console.log(`Handling offer. Collision? ${offerCollision}. Polite? ${polite}`);
 
             if (offerCollision) {
               if (!polite) {
                 console.log("Ignoring offer due to collision (impolite peer)");
                 return;
               }
-
+              
               // If we're polite and there's a collision, we need to rollback only if we're not in stable state
               if (this.peerConnection.signalingState !== "stable") {
                 console.log("Rolling back local description");
-                await this.peerConnection.setLocalDescription({
-                  type: "rollback",
-                });
+                await this.peerConnection.setLocalDescription({ type: "rollback" });
               }
             }
 
             console.log("Setting remote description (offer)");
-            await this.peerConnection.setRemoteDescription(
-              new RTCSessionDescription({
-                type: "offer",
-                sdp: data.sdp,
-              })
-            );
+            await this.peerConnection.setRemoteDescription(new RTCSessionDescription({
+              type: "offer",
+              sdp: data.sdp,
+            }));
 
             console.log("Creating answer");
             const answer = await this.peerConnection.createAnswer();
-
+            
             console.log("Setting local description (answer)");
             await this.peerConnection.setLocalDescription(answer);
 
@@ -355,12 +342,10 @@ class WebRTCHandler {
           try {
             if (this.peerConnection.signalingState === "have-local-offer") {
               console.log("Setting remote description (answer)");
-              await this.peerConnection.setRemoteDescription(
-                new RTCSessionDescription({
-                  type: "answer",
-                  sdp: data.sdp,
-                })
-              );
+              await this.peerConnection.setRemoteDescription(new RTCSessionDescription({
+                type: "answer",
+                sdp: data.sdp,
+              }));
 
               // Process any pending ICE candidates
               await this.processPendingCandidates();

@@ -26,10 +26,9 @@ let roomId = null;
 
 // Socket.IO Connection
 function connectToServer() {
-  const serverUrl = window.location.origin;
-  socket = io(serverUrl, {
-    transports: ["websocket"],
-    reconnectionDelayMax: 10000,
+  socket = io(document.location.host, {
+    secure: true,
+    rejectUnauthorized: false, // Accept self-signed certificate
   });
 
   socket.on("connect", () => {
