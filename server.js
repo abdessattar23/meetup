@@ -1,29 +1,18 @@
 const express = require("express");
 const { Server } = require("socket.io");
-const https = require("https");
-const fs = require("fs");
+const http = require("http");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 
 const app = express();
+app.use(express.static(__dirname));
 
-const server = https.createServer(app);
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
   },
-});
-
-// Serve static files
-app.use(express.static(path.join(__dirname)));
-
-// HTTP redirect to HTTPS
-app.use((req, res, next) => {
-  if (!req.secure) {
-    return res.redirect(["https://", req.hostname, req.url].join(""));
-  }
-  next();
 });
 
 // Store room data
@@ -197,7 +186,7 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = 10000;
-server.listen(PORT, "0.0.0.0", () => {
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
