@@ -198,7 +198,7 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const HOST = proccess.env.HOST || "https://pyt-0b09.onrender.com";
+const HOST = "https://pyt-0b09.onrender.com";
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on ${HOST}:${PORT}`);
 });
