@@ -26,7 +26,7 @@ let roomId = null;
 
 // Socket.IO Connection
 function connectToServer() {
-  socket = io(document.location.host, {
+  socket = io("https://pyt-0b09.onrender.com", {
     secure: true,
     rejectUnauthorized: false, // Accept self-signed certificate
   });
